@@ -14,30 +14,38 @@ Write-Host "Creating a resource group $resourceGroupName ..."
 New-AzResourceGroup -Name $resourceGroupName -Location $location
 
 Write-Host "Creating web network security group..."
-$webNsgRule = New-AzNetworkSecurityRuleConfig -Name "Allow-Web" `
+# Два правила: HTTP/HTTPS из интернета + весь трафик из VNet
+$webNsgRuleInternet = New-AzNetworkSecurityRuleConfig -Name "Allow-Web" `
     -Description "Allow HTTP and HTTPS from Internet" -Access Allow -Protocol Tcp -Direction Inbound -Priority 100 `
     -SourceAddressPrefix Internet -SourcePortRange * `
     -DestinationAddressPrefix * -DestinationPortRange "80","443"
 
-$webNsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name "webservers" `
-    -SecurityRules $webNsgRule
+$webNsgRuleVNet = New-AzNetworkSecurityRuleConfig -Name "Allow-VNet" `
+    -Description "Allow all traffic from VNet" -Access Allow -Protocol * -Direction Inbound -Priority 110 `
+    -SourceAddressPrefix VirtualNetwork -SourcePortRange * `
+    -DestinationAddressPrefix * -DestinationPortRange *
+
+$webNsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name $webSubnetName `
+    -SecurityRules $webNsgRuleInternet, $webNsgRuleVNet
 
 Write-Host "Creating management network security group..."
-$mngNsgRule = New-AzNetworkSecurityRuleConfig -Name "Allow-SSH" `
+# Два правила: SSH из интернета + весь трафик из VNet
+$mngNsgRuleInternet = New-AzNetworkSecurityRuleConfig -Name "Allow-SSH" `
     -Description "Allow SSH from Internet" -Access Allow -Protocol Tcp -Direction Inbound -Priority 100 `
     -SourceAddressPrefix Internet -SourcePortRange * `
     -DestinationAddressPrefix * -DestinationPortRange 22
 
-$mngNsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name "management" `
-    -SecurityRules $mngNsgRule
+$mngNsgRuleVNet = New-AzNetworkSecurityRuleConfig -Name "Allow-VNet" `
+    -Description "Allow all traffic from VNet" -Access Allow -Protocol * -Direction Inbound -Priority 110 `
+    -SourceAddressPrefix VirtualNetwork -SourcePortRange * `
+    -DestinationAddressPrefix * -DestinationPortRange *
+
+$mngNsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name $mngSubnetName `
+    -SecurityRules $mngNsgRuleInternet, $mngNsgRuleVNet
 
 Write-Host "Creating database network security group..."
-$dbNsgRule = New-AzNetworkSecurityRuleConfig -Name "Deny-Internet" `
-    -Description "Deny all inbound from Internet" -Access Deny -Protocol * -Direction Inbound -Priority 100 `
-    -SourceAddressPrefix Internet -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange *
-
-$dbNsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name "database" `
-    -SecurityRules $dbNsgRule
+# NSG для database БЕЗ правил (полагается на дефолтные правила Azure)
+$dbNsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name $dbSubnetName
 
 Write-Host "Creating a virtual network with attached NSGs..."
 $webSubnet = New-AzVirtualNetworkSubnetConfig -Name $webSubnetName -AddressPrefix $webSubnetIpRange -NetworkSecurityGroup $webNsg
